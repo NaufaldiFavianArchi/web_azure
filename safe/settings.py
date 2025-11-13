@@ -46,13 +46,13 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 
@@ -137,7 +137,7 @@ LOGOUT_REDIRECT_URL = '/login/'
 
 # Enable an in-process background fetcher (development only).
 # WARNING: Not recommended for multi-process production deployments.
-SAFE_FETCHER_LIVE = True
+SAFE_FETCHER_LIVE = os.environ.get('SAFE_FETCHER_LIVE', 'False') == 'True'
 SAFE_FETCHER_INTERVAL = 10  # seconds between fetches
 
 STATIC_URL = '/static/'
