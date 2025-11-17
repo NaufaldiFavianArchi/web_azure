@@ -31,6 +31,29 @@ AZURE_HOSTNAME = os.environ.get('AZURE_HOSTNAME')
 if AZURE_HOSTNAME:
     ALLOWED_HOSTS.append(AZURE_HOSTNAME)
 
+# === TAMBAHKAN SEMUA KODE DI BAWAH INI ===
+#
+
+# Pengaturan Produksi untuk Proxy HTTPS seperti Azure
+
+# 1. Membaca domain tepercaya dari environment variable
+CSRF_TRUSTED_ORIGINS_STRING = os.environ.get('CSRF_TRUSTED_ORIGINS')
+if CSRF_TRUSTED_ORIGINS_STRING:
+    CSRF_TRUSTED_ORIGINS = [CSRF_TRUSTED_ORIGINS_STRING]
+
+# 2. Memberi tahu Django untuk memercayai header 'https' dari proxy
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# 3. Mengatur cookie agar hanya dikirim melalui https
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+
+# 4. Mengatur kebijakan referrer
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+#
+# === AKHIR DARI KODE TAMBAHAN ===
+#
 
 # Application definition
 
