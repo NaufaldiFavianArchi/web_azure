@@ -1,450 +1,156 @@
-// Dashboard Live Update Script with Advanced Features
-(function() {
-    'use strict';
+document.addEventListener('DOMContentLoaded', function() {
+    // Konfigurasi
+    const DEVICE_ID = 'sensor_002'; // Bisa dibuat dinamis nanti
+    const API_LATEST_URL = `/api/v1/latest_data?device_id=${DEVICE_ID}`;
+    const API_HISTORY_URL = `/api/v1/historical_data?device_id=${DEVICE_ID}`;
+    const UPDATE_INTERVAL = 5000; // Update setiap 5 detik
+
+    // Referensi Elemen DOM
+    const totalLocationsElem = document.getElementById('total-locations');
+    const tableBody = document.getElementById('sensor-table-body');
+    const statusBadge = document.getElementById('connection-status');
     
-    // Global data storage
-    let allData = [];
-    let filteredData = [];
-    let tempChart = null;
-    let recentStatusPie = null;
-    let currentPage = 1;
-    const itemsPerPage = 10;
-    
-    // Filter state
-    let currentFilter = 'all'; // 'all', 'normal', 'anomaly'
-    let currentSort = 'newest'; // 'newest', 'oldest', 'temp_high', 'temp_low'
-    let searchQuery = '';
-    let chartDataLimit = 30; // Default 30 data untuk line chart
-    
-    // Initialize charts on page load
-    function initCharts() {
-        // Read initial data from server
-        const getJsonData = (id) => {
-            const elem = document.getElementById(id);
-            if (!elem) return null;
-            try {
-                return JSON.parse(elem.textContent || '[]');
-            } catch(e) {
-                console.error('Parse error for', id, e);
-                return [];
-            }
-        };
-        
-        const labels = getJsonData('chart_labels_json') || [];
-        const temps = getJsonData('chart_temps_json') || [];
-        const humids = getJsonData('chart_humids_json') || [];
-        
-        // Temperature & Humidity Line Chart
-        const ctx = document.getElementById('tempHumidityChart');
-        if (ctx) {
-            tempChart = new Chart(ctx.getContext('2d'), {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { 
-                            label: 'Suhu (°C)', 
-                            data: temps, 
-                            borderColor: '#f72585', 
-                            backgroundColor: 'rgba(247,37,133,0.08)', 
-                            tension: 0.25 
-                        },
-                        { 
-                            label: 'Kelembaban (%)', 
-                            data: humids, 
-                            borderColor: '#4895ef', 
-                            backgroundColor: 'rgba(72,149,239,0.08)', 
-                            tension: 0.25 
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true } }
-                }
-            });
-        }
-        
-        // Pie Chart for Status Distribution
-        const ctxPie = document.getElementById('recentStatusPie');
-        if (ctxPie) {
-            const anomalyCount = getJsonData('anomaly_count_json') || 0;
-            const normalCount = getJsonData('normal_count_json') || 0;
-            
-            recentStatusPie = new Chart(ctxPie.getContext('2d'), {
-                type: 'doughnut',
-                data: { 
-                    labels: ['Normal','Anomali'], 
-                    datasets: [{ 
-                        data: [normalCount, anomalyCount], 
-                        backgroundColor: ['#38b000','#f72585'] 
-                    }] 
-                },
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false 
-                }
-            });
-        }
-    }
-    
-    // Apply filters and sorting
-    function applyFiltersAndSort() {
-        // Start with all data
-        let data = allData.slice();
-        
-        // Apply filter
-        if (currentFilter === 'normal') {
-            data = data.filter(r => !r.is_anomaly);
-        } else if (currentFilter === 'anomaly') {
-            data = data.filter(r => r.is_anomaly);
-        }
-        
-        // Apply search
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            data = data.filter(r => {
-                return (r.device_id && r.device_id.toLowerCase().includes(query)) ||
-                       (r.temperature && r.temperature.toString().includes(query)) ||
-                       (r.humidity && r.humidity.toString().includes(query));
-            });
-        }
-        
-        // Apply sorting
-        if (currentSort === 'newest') {
-            data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        } else if (currentSort === 'oldest') {
-            data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        } else if (currentSort === 'temp_high') {
-            data.sort((a, b) => parseFloat(b.temperature) - parseFloat(a.temperature));
-        } else if (currentSort === 'temp_low') {
-            data.sort((a, b) => parseFloat(a.temperature) - parseFloat(b.temperature));
-        }
-        
-        filteredData = data;
-        currentPage = 1; // Reset to first page
-        renderTable();
-        renderPagination();
-    }
-    
-    // Render table with pagination
-    function renderTable() {
-        const tbody = document.getElementById('sensor-rows');
-        if (!tbody) return;
-        
-        if (filteredData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#999;">Tidak ada data yang sesuai dengan filter</td></tr>';
-            return;
-        }
-        
-        // Calculate pagination
-        const startIdx = (currentPage - 1) * itemsPerPage;
-        const endIdx = startIdx + itemsPerPage;
-        const pageData = filteredData.slice(startIdx, endIdx);
-        
-        const locationName = document.querySelector('.header-content h1');
-        const locName = locationName ? locationName.textContent.replace('Dashboard Sensor - ', '').trim() : '';
-        
-        tbody.innerHTML = pageData.map((r, idx) => {
-            const isAnomaly = r.is_anomaly || false;
-            const rowClass = isAnomaly ? 'anomaly-row' : '';
-            const statusHtml = isAnomaly 
-                ? '<span class="status-anomaly">⚠️ ANOMALI</span>' 
-                : '<span class="status-normal">✅ NORMAL</span>';
-            
-            const dt = new Date(r.timestamp);
-            const dateStr = dt.toLocaleDateString('id-ID') + ' ' + dt.toLocaleTimeString('id-ID');
-            const globalIdx = startIdx + idx + 1;
-            
-            return '<tr class="' + rowClass + '">' +
-                '<td>' + globalIdx + '</td>' +
-                '<td>' + dateStr + '</td>' +
-                '<td>' + (r.device_id || '-') + '</td>' +
-                '<td>' + r.temperature + '</td>' +
-                '<td>' + r.humidity + '</td>' +
-                '<td>' + locName + '</td>' +
-                '<td>' + statusHtml + '</td>' +
-                '</tr>';
-        }).join('');
-    }
-    
-    // Render pagination controls
-    function renderPagination() {
-        const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-        const paginationDiv = document.getElementById('pagination-controls');
-        
-        if (!paginationDiv || totalPages <= 1) {
-            if (paginationDiv) paginationDiv.innerHTML = '';
-            return;
-        }
-        
-        let html = '<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:20px;">';
-        html += '<span style="color:#666;font-size:14px;">Halaman ' + currentPage + ' dari ' + totalPages + '</span>';
-        
-        // Previous button
-        if (currentPage > 1) {
-            html += '<button class="pagination-btn" data-page="' + (currentPage - 1) + '" style="padding:8px 16px;border:1px solid #4361ee;background:#fff;color:#4361ee;border-radius:6px;cursor:pointer;">← Sebelumnya</button>';
-        }
-        
-        // Page numbers (show max 5)
-        const startPage = Math.max(1, currentPage - 2);
-        const endPage = Math.min(totalPages, startPage + 4);
-        
-        for (let i = startPage; i <= endPage; i++) {
-            const activeStyle = i === currentPage ? 'background:#4361ee;color:#fff;' : 'background:#fff;color:#4361ee;';
-            html += '<button class="pagination-btn" data-page="' + i + '" style="padding:8px 12px;border:1px solid #4361ee;' + activeStyle + 'border-radius:6px;cursor:pointer;min-width:40px;">' + i + '</button>';
-        }
-        
-        // Next button
-        if (currentPage < totalPages) {
-            html += '<button class="pagination-btn" data-page="' + (currentPage + 1) + '" style="padding:8px 16px;border:1px solid #4361ee;background:#fff;color:#4361ee;border-radius:6px;cursor:pointer;">Berikutnya →</button>';
-        }
-        
-        html += '</div>';
-        paginationDiv.innerHTML = html;
-        
-        // Add click handlers
-        document.querySelectorAll('.pagination-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                currentPage = parseInt(this.dataset.page);
-                renderTable();
-                renderPagination();
-            });
-        });
-    }
-    
-    // Update table with new data
-    function updateTable(rows, locationName) {
-        if (!rows || rows.length === 0) return;
-        allData = rows;
-        applyFiltersAndSort();
-    }
-    
-    // Update charts with new data
-    function updateCharts(rows, totalNormal, totalAnomalies) {
-        if (!rows || rows.length === 0) {
-            rows = allData;
-        }
-        if (rows.length === 0) return;
-        
-        // PERBAIKAN: Gunakan chartDataLimit (dinamis sesuai dropdown)
-        const lastN_newest = rows.slice(0, chartDataLimit);
-        
-        // Untuk chart line (perlu dibalik agar kronologis dari kiri ke kanan)
-        const lastN_chrono = lastN_newest.slice().reverse();
-        
-        const chartLabels = lastN_chrono.map(r => new Date(r.timestamp).toLocaleTimeString('id-ID'));
-        const chartTemps = lastN_chrono.map(r => parseFloat(r.temperature) || 0);
-        const chartHums = lastN_chrono.map(r => parseFloat(r.humidity) || 0);
-        
-        // Update line chart
-        if (tempChart) {
-            tempChart.data.labels = chartLabels;
-            tempChart.data.datasets[0].data = chartTemps;
-            tempChart.data.datasets[1].data = chartHums;
-            tempChart.update('none'); // No animation for live updates
-        }
-        
-        // PERBAIKAN: Gunakan total dari API (SEMUA data, bukan hanya 50)
-        // Jika tidak ada parameter, hitung dari rows
-        const anomalies = totalAnomalies !== undefined ? totalAnomalies : rows.filter(r => r.is_anomaly).length;
-        const normal = totalNormal !== undefined ? totalNormal : rows.filter(r => !r.is_anomaly).length;
-        
-        // Update pie chart dengan SEMUA data
-        if (recentStatusPie) {
-            recentStatusPie.data.datasets[0].data = [normal, anomalies];
-            recentStatusPie.update('none');
-        }
-        
-        // Update stat cards dengan SEMUA data (bukan 50)
-        const totalCard = document.querySelector('.stat-card.total .stat-value');
-        const normalCard = document.querySelector('.stat-card.normal .stat-value');
-        const anomalyCard = document.querySelector('.stat-card.anomaly .stat-value');
-        
-        if (totalCard) totalCard.textContent = normal + anomalies;
-        if (normalCard) normalCard.textContent = normal;
-        if (anomalyCard) anomalyCard.textContent = anomalies;
-    }
-    
-    // Fetch data from server
-    async function fetchData(locationId, locationName) {
-        try {
-            const url = '/location/' + locationId + '/data.json';
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                console.warn('Fetch failed:', response.status);
-                return;
-            }
-            
-            const payload = await response.json();
-            const rows = payload.data || [];
-            
-            if (rows.length > 0) {
-                updateTable(rows, locationName);
-                // Pass total counts dari API (menghitung SEMUA data di database)
-                updateCharts(rows, payload.total_normal_count, payload.total_anomaly_count);
-            }
-            
-        } catch (error) {
-            console.error('Fetch error:', error);
-        }
-    }
-    
-    // Export to CSV function
-    function exportToCSV() {
-        if (filteredData.length === 0) {
-            alert('Tidak ada data untuk diekspor!');
-            return;
-        }
-        
-        const locationName = document.querySelector('.header-content h1');
-        const locName = locationName ? locationName.textContent.replace('Dashboard Sensor - ', '').trim() : 'Unknown';
-        
-        let csvContent = 'No,Waktu,Device ID,Suhu (°C),Kelembaban (%),Lokasi,Status\n';
-        
-        filteredData.forEach((r, idx) => {
-            const dt = new Date(r.timestamp);
-            const dateStr = dt.toLocaleDateString('id-ID') + ' ' + dt.toLocaleTimeString('id-ID');
-            const status = r.is_anomaly ? 'ANOMALI' : 'NORMAL';
-            
-            csvContent += (idx + 1) + ',"' + dateStr + '","' + (r.device_id || '-') + '",' + 
-                          r.temperature + ',' + r.humidity + ',"' + locName + '","' + status + '"\n';
-        });
-        
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        const fileName = 'sensor_data_' + locName + '_' + new Date().toISOString().split('T')[0] + '.csv';
-        
-        link.setAttribute('href', url);
-        link.setAttribute('download', fileName);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-        console.log('CSV exported:', fileName);
-    }
-    
-    // Initialize everything when page loads
-    window.addEventListener('DOMContentLoaded', function() {
-        console.log('Dashboard initializing...');
-        
-        // Get location info from page
-        const getJsonValue = (id) => {
-            const elem = document.getElementById(id);
-            if (!elem) return null;
-            try {
-                return JSON.parse(elem.textContent || 'null');
-            } catch(e) {
-                return null;
-            }
-        };
-        
-        const locationId = getJsonValue('current_location_id_json');
-        const locationNameElem = document.querySelector('.header-content h1');
-        const locationName = locationNameElem ? locationNameElem.textContent.replace('Dashboard Sensor - ', '').trim() : 'Unknown';
-        
-        if (!locationId) {
-            console.error('Location ID not found');
-            return;
-        }
-        
-        // Initialize charts
-        initCharts();
-        
-        // Setup filter buttons
-        const filterButtons = document.querySelectorAll('.filter-section .filter-btn');
-        filterButtons.forEach(btn => {
-            btn.addEventListener('click', function() {
-                if (this.tagName === 'BUTTON') {
-                    const text = this.textContent.trim();
-                    
-                    // Remove active from all buttons
-                    filterButtons.forEach(b => {
-                        if (b.tagName === 'BUTTON') b.classList.remove('active');
-                    });
-                    
-                    // Add active to clicked button
-                    this.classList.add('active');
-                    
-                    // Set filter
-                    if (text === 'Semua Data') {
-                        currentFilter = 'all';
-                    } else if (text === 'Normal') {
-                        currentFilter = 'normal';
-                    } else if (text === 'Anomali') {
-                        currentFilter = 'anomaly';
+    // Inisialisasi Grafik (Menggunakan Chart.js)
+    let sensorChart;
+    const ctx = document.getElementById('sensorChart').getContext('2d');
+
+    function initChart() {
+        sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Suhu (°C)',
+                    data: [],
+                    borderColor: '#3b82f6', // Biru
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Kelembaban (%)',
+                    data: [],
+                    borderColor: '#10b981', // Hijau
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        display: false // Sembunyikan label waktu agar tidak penuh
+                    },
+                    y: {
+                        beginAtZero: false
                     }
-                    
-                    applyFiltersAndSort();
+                },
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
                 }
-            });
+            }
         });
-        
-        // Setup sort dropdown
-        const sortSelect = document.getElementById('deviceSelect');
-        if (sortSelect) {
-            sortSelect.addEventListener('change', function() {
-                const value = this.value;
-                if (value === 'Urutkan Terbaru') currentSort = 'newest';
-                else if (value === 'Urutkan Terlama') currentSort = 'oldest';
-                else if (value === 'Suhu Tertinggi') currentSort = 'temp_high';
-                else if (value === 'Suhu Terendah') currentSort = 'temp_low';
+    }
+
+    // Fungsi: Format Timestamp ke Waktu yang Bisa Dibaca
+    function formatTime(timestamp) {
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    // Fungsi: Ambil Data Terbaru (Live)
+    async function fetchLatestData() {
+        try {
+            const response = await fetch(API_LATEST_URL);
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                const data = result.data;
                 
-                applyFiltersAndSort();
-            });
-        }
-        
-        // Setup search
-        const searchBox = document.querySelector('.search-box');
-        const searchBtn = document.querySelector('.search-section .filter-btn');
-        
-        if (searchBox && searchBtn) {
-            searchBtn.addEventListener('click', function() {
-                searchQuery = searchBox.value.trim();
-                applyFiltersAndSort();
-            });
-            
-            searchBox.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    searchQuery = this.value.trim();
-                    applyFiltersAndSort();
+                // Update Status Koneksi
+                if (statusBadge) {
+                    statusBadge.textContent = 'Online';
+                    statusBadge.className = 'px-2 py-1 text-xs font-bold text-white bg-green-500 rounded-full';
                 }
-            });
+
+                // Tambahkan Baris Baru ke Tabel (Paling Atas)
+                const newRow = document.createElement('tr');
+                newRow.className = "border-b hover:bg-gray-50 transition-colors";
+                newRow.innerHTML = `
+                    <td class="py-3 px-4">${formatTime(data.timestamp)}</td>
+                    <td class="py-3 px-4 font-medium text-gray-900">${data.device_id}</td>
+                    <td class="py-3 px-4 text-blue-600 font-bold">${data.temperature.toFixed(1)}°C</td>
+                    <td class="py-3 px-4 text-green-600 font-bold">${data.humidity.toFixed(1)}%</td>
+                    <td class="py-3 px-4">
+                        ${data.is_anomaly 
+                            ? '<span class="px-2 py-1 text-xs text-white bg-red-500 rounded-full">Bahaya</span>' 
+                            : '<span class="px-2 py-1 text-xs text-white bg-green-500 rounded-full">Normal</span>'}
+                    </td>
+                `;
+
+                // Hapus baris lama jika lebih dari 10, lalu tambahkan yang baru
+                if (tableBody.rows.length >= 10) {
+                    tableBody.deleteRow(-1);
+                }
+                tableBody.insertBefore(newRow, tableBody.firstChild);
+
+                // Efek Kedip (Flash) untuk Indikator Update
+                newRow.classList.add('bg-blue-50');
+                setTimeout(() => newRow.classList.remove('bg-blue-50'), 500);
+
+            }
+        } catch (error) {
+            console.error('Gagal mengambil data live:', error);
+            if (statusBadge) {
+                statusBadge.textContent = 'Offline';
+                statusBadge.className = 'px-2 py-1 text-xs font-bold text-white bg-red-500 rounded-full';
+            }
         }
-        
-        // Setup export CSV button
-        const exportBtn = document.getElementById('exportCsvBtn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', exportToCSV);
+    }
+
+    // Fungsi: Ambil Data Historis (Grafik)
+    async function fetchHistoricalData() {
+        try {
+            const response = await fetch(API_HISTORY_URL);
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                const history = result.data;
+                
+                // Siapkan array data untuk Chart.js
+                const labels = history.map(item => formatTime(item.timestamp));
+                const temps = history.map(item => item.temperature);
+                const hums = history.map(item => item.humidity);
+
+                // Update Grafik
+                if (sensorChart) {
+                    sensorChart.data.labels = labels;
+                    sensorChart.data.datasets[0].data = temps;
+                    sensorChart.data.datasets[1].data = hums;
+                    sensorChart.update();
+                }
+            }
+        } catch (error) {
+            console.error('Gagal mengambil data historis:', error);
         }
-        
-        // Setup chart data limit dropdown
-        const chartLimitSelect = document.getElementById('chartDataLimit');
-        if (chartLimitSelect) {
-            chartLimitSelect.addEventListener('change', function() {
-                chartDataLimit = parseInt(this.value);
-                console.log('Chart limit changed to:', chartDataLimit);
-                // Re-render chart dengan data limit baru
-                updateCharts(allData);
-            });
-        }
-        
-        // Start polling after 3 seconds
-        setTimeout(function() {
-            console.log('Starting live updates for location', locationId);
-            
-            // First fetch
-            fetchData(locationId, locationName);
-            
-            // Then poll every 5 seconds
-            setInterval(function() {
-                fetchData(locationId, locationName);
-            }, 5000);
-        }, 3000);
-    });
-})();
+    }
+
+    // --- EKSEKUSI UTAMA ---
+    initChart(); // 1. Buat Grafik Kosong
+    fetchHistoricalData(); // 2. Isi Grafik dengan Data Lama
+    fetchLatestData(); // 3. Ambil Data Terbaru Sekali
+
+    // 4. Mulai Loop Update Otomatis
+    setInterval(() => {
+        fetchLatestData();     // Update Tabel & Status (Cepat)
+        fetchHistoricalData(); // Update Grafik (Bisa lebih lambat jika mau)
+    }, UPDATE_INTERVAL);
+
+});

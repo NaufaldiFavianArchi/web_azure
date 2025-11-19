@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SAFE - Dashboard Data Sensor: {{ current_location.location_name|default:"Memuat..." }}</title>
     
+    <!-- Load Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         :root {
             --primary: #4361ee;
@@ -217,11 +220,6 @@
             background: linear-gradient(135deg, var(--danger), #b5179e);
         }
 
-        /* HILANGKAN trend-up/trend-down */
-        .stat-trend {
-            display: none;
-        }
-
         .stat-value {
             font-size: 36px;
             font-weight: 700;
@@ -268,78 +266,6 @@
             position: relative;
         }
 
-        .chart-placeholder {
-            width: 100%;
-            height: 100%;
-            background: #f8f9fa;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--gray);
-            font-weight: 500;
-        }
-
-        /* Action Bar */
-        .action-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            padding: 20px;
-            background: var(--white);
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
-        }
-
-        .filter-section {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        .filter-btn {
-            padding: 10px 20px;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 8px;
-            background: var(--white);
-            color: var(--gray);
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        .filter-btn.active {
-            background: var(--primary);
-            color: var(--white);
-            border-color: var(--primary);
-        }
-
-        .filter-btn:hover:not(.active) {
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-
-        .search-section {
-            display: flex;
-            gap: 12px;
-        }
-
-        .search-box {
-            padding: 10px 16px;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-            width: 240px;
-            transition: var(--transition);
-        }
-
-        .search-box:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
-        }
-
         /* Table Section */
         .table-section {
             background: var(--white);
@@ -360,30 +286,6 @@
             font-size: 20px;
             font-weight: 600;
             color: var(--dark);
-        }
-
-        .table-actions {
-            display: flex;
-            gap: 12px;
-        }
-
-        .export-btn, .refresh-btn {
-            padding: 10px 20px;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 8px;
-            background: var(--white);
-            color: var(--gray);
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .export-btn:hover, .refresh-btn:hover {
-            border-color: var(--primary);
-            color: var(--primary);
         }
 
         .table-container {
@@ -426,64 +328,20 @@
             background-color: #f8f9fa;
         }
 
-        .anomaly-row {
-            background-color: rgba(247, 37, 133, 0.05) !important;
-            font-weight: 600;
-            border-left: 4px solid var(--danger);
+        /* Status Indicators */
+        #connection-status {
+            transition: all 0.3s ease;
         }
-
-        .anomaly-row:hover {
-            background-color: rgba(247, 37, 133, 0.1) !important;
-        }
-
-        .status-anomaly {
-            color: var(--danger);
-            font-weight: 600;
-            background: rgba(247, 37, 133, 0.1);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .status-normal {
-            color: #38b000;
-            font-weight: 500;
-            background: rgba(56, 176, 0, 0.1);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: var(--gray);
-        }
-
-        .empty-state a {
-            color: var(--primary);
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .empty-state a:hover {
-            text-decoration: underline;
-        }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            color: var(--gray-light);
-            font-size: 14px;
-            padding: 20px;
-        }
+        
+        .bg-green-500 { background-color: #10b981; }
+        .bg-red-500 { background-color: #ef4444; }
+        .bg-gray-400 { background-color: #9ca3af; }
+        .text-white { color: #ffffff; }
+        .text-xs { font-size: 0.75rem; }
+        .font-bold { font-weight: 700; }
+        .rounded-full { border-radius: 9999px; }
+        .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+        .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
 
         /* Animations */
         @keyframes fadeIn {
@@ -508,69 +366,9 @@
                 gap: 20px;
                 text-align: center;
             }
-            
             .user-info {
                 justify-content: center;
                 flex-wrap: wrap;
-            }
-            
-            .action-bar {
-                flex-direction: column;
-                gap: 16px;
-            }
-            
-            .filter-section, .search-section {
-                width: 100%;
-                justify-content: center;
-            }
-            
-            .search-box {
-                width: 100%;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 16px;
-            }
-            
-            .header {
-                padding: 20px;
-            }
-            
-            .stats-cards {
-                grid-template-columns: 1fr;
-            }
-            
-            .table-section {
-                padding: 20px;
-            }
-            
-            .table-header {
-                flex-direction: column;
-                gap: 16px;
-                text-align: center;
-            }
-            
-            th, td {
-                padding: 12px 8px;
-                font-size: 14px;
-            }
-        }
-
-        @media (max-width: 576px) {
-            .filter-section {
-                flex-wrap: wrap;
-            }
-            
-            .table-actions {
-                flex-direction: column;
-                width: 100%;
-            }
-            
-            .export-btn, .refresh-btn {
-                width: 100%;
-                justify-content: center;
             }
         }
     </style>
@@ -592,14 +390,17 @@
                             Dashboard Sensor - Lokasi Tidak Ditemukan
                         {% endif %}
                     </h1>
-                    <p class="subtitle">Data historis dan analisis untuk lokasi: {{ current_location.location_name|default:"Tidak Ditemukan" }}</p>
+                    <p class="subtitle">
+                        Lokasi: {{ current_location.location_name|default:"-" }} 
+                        <span id="connection-status" class="px-2 py-1 text-xs font-bold text-white bg-gray-400 rounded-full" style="margin-left: 10px;">Connecting...</span>
+                    </p>
                 </div>
             </div>
 
             {% if user.is_authenticated %}
                 <div class="user-info">
                     <span class="username">👤 {{ user.username }}</span>
-                    <a href="{% url 'location_list' %}" class="back-btn">
+                    <a href="#" class="back-btn"> <!-- Ganti dengan URL yang sesuai -->
                         <span>⬅️</span> Kembali ke Daftar Lokasi
                     </a>
                 </div>
@@ -611,132 +412,76 @@
                 <div class="stat-header">
                     <div class="stat-icon">📊</div>
                 </div>
-                <div class="stat-value" id="totalCount">{{ normal_count|add:anomaly_count|default:"0" }}</div>
-                <div class="stat-label">Total Data Sensor</div>
+                <!-- ID ditambahkan untuk JS -->
+                <div class="stat-value" id="total-locations">{{ total_count|default:"0" }}</div>
+                <div class="stat-label">Total Data Masuk</div>
             </div>
             <div class="stat-card normal">
                 <div class="stat-header">
                     <div class="stat-icon">✅</div>
                 </div>
-                <div class="stat-value" id="normalCount">{{ normal_count|default:"0" }}</div>
-                <div class="stat-label">Data Normal</div>
+                <div class="stat-value">{{ normal_count|default:"0" }}</div>
+                <div class="stat-label">Suhu Rata-rata</div>
             </div>
             <div class="stat-card anomaly">
                 <div class="stat-header">
                     <div class="stat-icon">⚠️</div>
                 </div>
-                <div class="stat-value" id="anomalyCount">{{ anomaly_count|default:"0" }}</div>
-                <div class="stat-label">Data Anomali</div>
+                <div class="stat-value">{{ anomaly_count|default:"0" }}</div>
+                <div class="stat-label">Kelembaban Rata-rata</div>
             </div>
         </div>
 
         <div class="charts-section">
             <div class="chart-card">
                 <div class="chart-header">
-                    <h3 class="chart-title">Riwayat Suhu & Kelembaban</h3>
-                    <div class="chart-actions">
-                        <select id="chartDataLimit" class="filter-btn" style="padding: 6px 12px;">
-                            <option value="10">10 Data Terakhir</option>
-                            <option value="20">20 Data Terakhir</option>
-                            <option value="30" selected>30 Data Terakhir</option>
-                            <option value="50">50 Data Terakhir</option>
-                        </select>
-                    </div>
+                    <h3 class="chart-title">Grafik Real-time (24 Jam)</h3>
                 </div>
                 <div class="chart-container">
-                    <canvas id="tempHumidityChart"></canvas>
+                    <!-- ID ditambahkan untuk JS -->
+                    <canvas id="sensorChart"></canvas>
                 </div>
             </div>
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h3 class="chart-title">Distribusi Data (Normal / Anomali)</h3>
-                </div>
-                <div class="chart-container">
-                    <canvas id="recentStatusPie"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <div class="action-bar">
-            <div class="filter-section">
-                <button class="filter-btn active">Semua Data</button>
-                <button class="filter-btn">Normal</button>
-                <button class="filter-btn">Anomali</button>
-                <select id="deviceSelect" class="filter-btn" style="padding: 10px 16px;">
-                    <option>Urutkan Terbaru</option>
-                    <option>Urutkan Terlama</option>
-                    <option>Suhu Tertinggi</option>
-                    <option>Suhu Terendah</option>
-                </select>
-            </div>
-            
-            <div class="search-section">
-                <input type="text" class="search-box" placeholder="Cari device ID, suhu, atau kelembaban...">
-                <button class="filter-btn">🔍 Cari</button>
-            </div>
+            <!-- Anda bisa menambahkan chart kedua di sini jika mau -->
         </div>
 
         <div class="table-section">
             <div class="table-header">
-                <h2 class="table-title">Riwayat Pembacaan Sensor</h2>
-                <div class="table-actions">
-                    <!-- PERBAIKAN: Tombol Export CSV -->
-                    <button id="exportCsvBtn" class="export-btn">
-                        <span>📥</span>
-                        Export CSV
-                    </button>
-                    <button class="refresh-btn" onclick="window.location.reload();">
-                        <span>🔄</span>
-                        Refresh
-                    </button>
-                </div>
+                <h2 class="table-title">Log Data Masuk (Live)</h2>
             </div>
 
         <div class="table-container">
-            <table id="sensorTable">
+            <table>
                     <thead>
                         <tr>
-                            <th>No.</th>
                             <th>Waktu</th>
                             <th>Device ID</th>
                             <th>Suhu (°C)</th>
                             <th>Kelembaban (%)</th>
-                            <th>Lokasi</th>
                             <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody id="sensor-rows">
-                        {% for reading in sensor_readings %}
-                        <tr class="{% if reading.is_anomaly %}anomaly-row{% endif %}">
-                            <td>{{ forloop.counter }}</td>
-                            <td>{{ reading.timestamp|date:"d M Y H:i:s" }}</td>
-                            <td>{{ reading.device_id|default:'-' }}</td>
-                            <td>{{ reading.temperature }}</td>
-                            <td>{{ reading.humidity }}</td>
-                            <td>{{ reading.location.location_name }}</td>
+                    <!-- ID ditambahkan untuk JS -->
+                    <tbody id="sensor-table-body">
+                        <!-- Data awal dari Django (opsional, agar tidak kosong saat loading) -->
+                        {% for reading in sensor_readings|slice:":5" %}
+                        <tr>
+                            <td>{{ reading.timestamp|date:"H:i:s" }}</td>
+                            <td>{{ reading.device_id }}</td>
+                            <td>{{ reading.temperature }}°C</td>
+                            <td>{{ reading.humidity }}%</td>
                             <td>
                                 {% if reading.is_anomaly %}
-                                    <span class="status-anomaly">⚠️ ANOMALI</span>
+                                    <span style="color: red; font-weight: bold;">Bahaya</span>
                                 {% else %}
-                                    <span class="status-normal">✅ NORMAL</span>
+                                    <span style="color: green; font-weight: bold;">Normal</span>
                                 {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="7" class="empty-state">
-                                <strong>Tidak ada data sensor yang tersimpan untuk lokasi ini.</strong>
-                                <br>
-                                <a href="#">Klik di sini untuk menambahkan data sensor pertama</a>
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            
-            <!-- Pagination Controls -->
-            <div id="pagination-controls"></div>
         </div>
 
         <div class="footer">
@@ -744,287 +489,7 @@
         </div>
     </div>
     
-    <!-- Charts -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- DataTables CSS/JS and Buttons (CSV) -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.5/css/jquery.dataTables.min.css">
-    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-    <!-- Use requested DataTables build -->
-    <script src="//cdn.datatables.net/2.3.4/js/dataTables.min.js"></script>
-    <!-- JSON data for safe JS consumption (injected from view as JSON strings) -->
-    <script type="application/json" id="chart_labels_json">{{ chart_labels_json|safe }}</script>
-    <script type="application/json" id="chart_temps_json">{{ chart_temps_json|safe }}</script>
-    <script type="application/json" id="chart_humids_json">{{ chart_humids_json|safe }}</script>
-    <script type="application/json" id="anomaly_count_json">{{ anomaly_count_json|safe }}</script>
-    <script type="application/json" id="normal_count_json">{{ normal_count_json|safe }}</script>
-    <script type="application/json" id="current_location_id_json">{{ current_location_id_json|safe }}</script>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Filter functionality
-            const filterButtons = document.querySelectorAll('.filter-btn');
-            
-            filterButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    if (this.tagName === 'BUTTON') {
-                        filterButtons.forEach(btn => {
-                            if (btn.tagName === 'BUTTON') {
-                                btn.classList.remove('active');
-                            }
-                        });
-                        this.classList.add('active');
-                        const filterType = this.textContent.trim();
-                        console.log(`Filtering by: ${filterType}`);
-                    }
-                });
-            });
-
-            // Search functionality
-            const searchBox = document.querySelector('.search-box');
-            const searchButton = document.querySelector('.search-section .filter-btn');
-            
-            searchButton.addEventListener('click', function() {
-                const searchTerm = searchBox.value.trim();
-                if (searchTerm) {
-                    console.log(`Searching for: ${searchTerm}`);
-                    // Implement search logic here
-                }
-            });
-            
-            searchBox.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    searchButton.click();
-                }
-            });
-
-            // PERBAIKAN: Fungsi Export CSV dengan konfirmasi yang benar
-            document.getElementById('exportCsvBtn').addEventListener('click', function() {
-                // Tampilkan konfirmasi
-                const userConfirmed = confirm('Apakah Anda yakin ingin mengekspor data sensor ke file CSV?');
-                
-                // Jika user memilih Cancel, hentikan proses
-                if (!userConfirmed) {
-                    console.log('Export CSV dibatalkan oleh user');
-                    return;
-                }
-
-                // Jika user memilih OK, lanjutkan dengan export
-                try {
-                    // Data untuk CSV (gunakan data dari Django context)
-                    const sensorReadings = {% autoescape off %}{{ sensor_readings|default:"[]" }}{% endautoescape %};
-                    
-                    if (!sensorReadings || sensorReadings.length === 0) {
-                        alert('Tidak ada data sensor untuk diekspor!');
-                        return;
-                    }
-
-                    // Header CSV
-                    let csvContent = "No.,Waktu,Device ID,Suhu (°C),Kelembaban (%),Lokasi,Status\n";
-                    
-                    // Data rows
-                    sensorReadings.forEach((reading, index) => {
-                        const timestamp = new Date(reading.timestamp).toLocaleString('id-ID');
-                        const deviceId = reading.device_id || '-';
-                        const temperature = reading.temperature || '0';
-                        const humidity = reading.humidity || '0';
-                        const locationName = reading.location?.location_name || '{{ current_location.location_name|default:"-" }}';
-                        const status = reading.is_anomaly ? 'ANOMALI' : 'NORMAL';
-                        
-                        csvContent += `${index + 1},"${timestamp}","${deviceId}",${temperature},${humidity},"${locationName}","${status}"\n`;
-                    });
-
-                    // Create and download CSV file
-                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    const fileName = `sensor_data_{{ current_location.location_name|default:"unknown" }}_${new Date().toISOString().split('T')[0]}.csv`;
-                    
-                    link.setAttribute('href', url);
-                    link.setAttribute('download', fileName);
-                    link.style.visibility = 'hidden';
-                    
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    
-                    // Clean up URL object
-                    setTimeout(() => URL.revokeObjectURL(url), 100);
-                    
-                    console.log('CSV exported successfully');
-                    
-                } catch (error) {
-                    console.error('Error exporting CSV:', error);
-                    alert('Terjadi kesalahan saat mengekspor data. Silakan coba lagi.');
-                }
-            });
-
-            // Render Chart.js charts
-            // Read server-provided arrays from json_script elements (null-safe)
-            const safeText = id => (document.getElementById(id) && document.getElementById(id).textContent) ? document.getElementById(id).textContent : '[]';
-            const labels = JSON.parse(safeText('chart_labels_json'));
-            const temps = JSON.parse(safeText('chart_temps_json'));
-            const humids = JSON.parse(safeText('chart_humids_json'));
-
-            const ctx = document.getElementById('tempHumidityChart').getContext('2d');
-            const tempChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'Suhu (°C)', data: temps, borderColor: '#f72585', backgroundColor: 'rgba(247,37,133,0.08)', tension: 0.25, pointRadius: 2, pointHoverRadius: 4, spanGaps: true },
-                        { label: 'Kelembaban (%)', data: humids, borderColor: '#4895ef', backgroundColor: 'rgba(72,149,239,0.08)', tension: 0.25, pointRadius: 2, pointHoverRadius: 4, spanGaps: true }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true } },
-                    elements: { line: { tension: 0.25 } },
-                    plugins: { legend: { display: true } }
-                }
-            });
-
-            // Create doughnut chart to show distribution (normal vs anomaly) overall
-            // initialize pie with zeros; we'll update live from server payload
-            const initialNormal = 0;
-            const initialAnomaly = 0;
-            const ctxRecentPie = document.getElementById('recentStatusPie').getContext('2d');
-            const recentStatusPie = new Chart(ctxRecentPie, {
-                type: 'doughnut',
-                data: { labels: ['Normal','Anomali'], datasets: [{ data: [initialNormal, initialAnomaly], backgroundColor: ['#38b000','#f72585'] }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
-            });
-
-            // Store fetched data
-            let allData = [];
-            const LOCATION_NAME = '{{ current_location.location_name|escapejs }}';
-            
-            // Live polling setup
-            const locationId = parseInt(safeText('current_location_id_json') || '0');
-            const dataUrl = '/location/' + locationId + '/data.json';
-            const deviceSelect = document.getElementById('deviceSelect');
-            let selectedDevice = null;
-
-            function renderTable(rows) {
-                const tbody = document.getElementById('sensor-rows');
-                
-                if (!rows || rows.length === 0) {
-                    console.log('No data to render');
-                    return; // Don't clear existing data
-                }
-
-                allData = rows;
-                
-                tbody.innerHTML = rows.map((r, idx) => {
-                    const cls = r.is_anomaly ? 'anomaly-row' : '';
-                    const statusSpan = r.is_anomaly 
-                        ? '<span class="status-anomaly">⚠️ ANOMALI</span>' 
-                        : '<span class="status-normal">✅ NORMAL</span>';
-                    const dt = new Date(r.timestamp);
-                    const dateStr = dt.toLocaleDateString('id-ID') + ' ' + dt.toLocaleTimeString('id-ID');
-                    
-                    return '<tr class="' + cls + '">' +
-                        '<td>' + (idx + 1) + '</td>' +
-                        '<td>' + dateStr + '</td>' +
-                        '<td>' + (r.device_id || '-') + '</td>' +
-                        '<td>' + r.temperature + '</td>' +
-                        '<td>' + r.humidity + '</td>' +
-                        '<td>' + LOCATION_NAME + '</td>' +
-                        '<td>' + statusSpan + '</td>' +
-                    '</tr>';
-                }).join('');
-            }
-
-            // Downsample helper: reduce number of plotted points evenly to maxPoints
-            function downsampleArray(arr, maxPoints) {
-                if (!arr || arr.length <= maxPoints) return arr.slice();
-                const step = Math.ceil(arr.length / maxPoints);
-                const out = [];
-                for (let i = 0; i < arr.length; i += step) out.push(arr[i]);
-                // ensure last point included
-                if (out[out.length - 1] !== arr[arr.length - 1]) out.push(arr[arr.length - 1]);
-                return out;
-            }
-
-            function updateCharts(rows) {
-                if (!rows || rows.length === 0) {
-                    if (allData.length > 0) rows = allData;
-                    else return;
-                }
-
-                const chrono = rows.slice().reverse();
-                const last50 = chrono.slice(-50);
-
-                const chartLabels = last50.map(r => new Date(r.timestamp).toLocaleTimeString('id-ID'));
-                const chartTemps = last50.map(r => parseFloat(r.temperature) || 0);
-                const chartHums = last50.map(r => parseFloat(r.humidity) || 0);
-
-                tempChart.data.labels = chartLabels;
-                tempChart.data.datasets[0].data = chartTemps;
-                tempChart.data.datasets[1].data = chartHums;
-                tempChart.update();
-
-                const anomalies = last50.filter(r => r.is_anomaly).length;
-                const normal = last50.length - anomalies;
-                
-                recentStatusPie.data.datasets[0].data = [normal, anomalies];
-                recentStatusPie.update();
-
-                document.querySelector('.stat-card.total .stat-value').textContent = rows.length;
-                document.querySelector('.stat-card.normal .stat-value').textContent = normal;
-                document.querySelector('.stat-card.anomaly .stat-value').textContent = anomalies;
-            }
-
-            async function fetchAndRender() {
-                try {
-                    const url = dataUrl;
-                    const res = await fetch(url);
-                    
-                    if (!res.ok) {
-                        console.warn('Fetch failed');
-                        return;
-                    }
-                    
-                    const payload = await res.json();
-                    const rows = payload.data || [];
-
-                    if (rows.length > 0) {
-                        renderTable(rows);
-                        updateCharts(rows);
-                    }
-                    
-                    if (payload.total_normal_count !== undefined && payload.total_anomaly_count !== undefined) {
-                        recentStatusPie.data.datasets[0].data = [payload.total_normal_count, payload.total_anomaly_count];
-                        recentStatusPie.update();
-                        
-                        const total = payload.total_count || (payload.total_normal_count + payload.total_anomaly_count);
-                        document.querySelector('.stat-card.total .stat-value').textContent = total;
-                        document.querySelector('.stat-card.normal .stat-value').textContent = payload.total_normal_count;
-                        document.querySelector('.stat-card.anomaly .stat-value').textContent = payload.total_anomaly_count;
-                    }
-                    
-                } catch (e) {
-                    console.error('Fetch error:', e);
-                }
-            }
-
-            // Start polling after page loads
-            setTimeout(function() {
-                fetchAndRender();
-                setInterval(fetchAndRender, 5000);
-            }, 3000);
-        });
-    </script>
-    
-    <!-- JSON data for JS consumption -->
-    <script type="application/json" id="chart_labels_json">{{ chart_labels_json|safe }}</script>
-    <script type="application/json" id="chart_temps_json">{{ chart_temps_json|safe }}</script>
-    <script type="application/json" id="chart_humids_json">{{ chart_humids_json|safe }}</script>
-    <script type="application/json" id="anomaly_count_json">{{ anomaly_count_json|safe }}</script>
-    <script type="application/json" id="normal_count_json">{{ normal_count_json|safe }}</script>
-    <script type="application/json" id="current_location_id_json">{{ current_location_id_json|safe }}</script>
-    
-    <!-- External dashboard script for live updates -->
+    <!-- Memuat file JavaScript Dashboard -->
     {% load static %}
     <script src="{% static 'js/dashboard.js' %}"></script>
 </body>
