@@ -1,11 +1,12 @@
 from django.urls import path
-from . import views
+from . import views, api
 from .views import (
     SensorDataListView, 
     AnomalyAlertUpdateView, 
     SensorLocationCreateView,
     SensorLocationListView 
 )
+
 
 urlpatterns = [
     path('', SensorLocationListView.as_view(), name='location_list'), 
@@ -18,4 +19,6 @@ urlpatterns = [
     path('location/<int:location_id>/data.json', views.location_data_json, name='location_data_json'),
     path('location/<int:location_id>/export.csv', views.export_location_csv, name='export_location_csv'),
     path('data/all.json', views.all_data_json, name='all_data_json'),
+    path('api/v1/latest_data', api.get_latest_data, name='api_latest_data'),
+    path('api/v1/historical_data', api.get_historical_data, name='api_historical_data'),
 ]
