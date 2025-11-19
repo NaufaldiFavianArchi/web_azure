@@ -9,6 +9,8 @@ from django.http import JsonResponse
 from django.http import HttpResponse
 import csv
 import json
+from django.core.serializers.json import DjangoJSONEncoder
+
 
 # lightweight status endpoint for background fetcher
 def fetcher_status(request):
@@ -165,12 +167,15 @@ class SensorDataListView(LoginRequiredMixin, ListView):
     model = SensorData
     template_name = 'SAFE_WEB/location_detail.html'
     context_object_name = 'sensor_readings'
-    paginate_by = 10  # show 10 readings per page
+    paginate_by = 10
 
     def get_queryset(self):
         location_id = self.kwargs.get('location_id')
-        device = self.request.GET.get('device_id')
+        # Filter berdasarkan lokasi
         qs = SensorData.objects.filter(location_id=location_id).order_by('-timestamp')
+        
+        # Filter opsional berdasarkan device_id
+        device = self.request.GET.get('device_id')
         if device:
             qs = qs.filter(raw_device_id=device)
         return qs
@@ -181,30 +186,54 @@ class SensorDataListView(LoginRequiredMixin, ListView):
         current_location = get_object_or_404(SensorLocation, id=location_id)
         context['current_location'] = current_location
         
+        # Ambil alerts terkait lokasi ini
         context['alerts'] = AnomalyAlert.objects.filter(
-            data_point__location__id=location_id 
-        ).order_by('-alert_time') 
-        context['location_form'] = SensorLocationForm() 
-        # Statistik sederhana - use the unsliced queryset to avoid "slice then filter" errors
-        full_qs = self.get_queryset().order_by('-timestamp')
+            data_point__location__id=location_id
+        ).order_by('-alert_time')
         
-        # PERBAIKAN: Hitung anomaly/normal dari SEMUA data (bukan hanya 50)
+        # Queryset penuh untuk statistik (tanpa paginasi)
+        full_qs = self.get_queryset()
+        
+        # Hitung total normal & anomali
         context['anomaly_count'] = full_qs.filter(is_anomaly=True).count()
         context['normal_count'] = full_qs.filter(is_anomaly=False).count()
-        
-        # Data untuk grafik (labels, suhu, kelembaban) - ambil 30 terakhir untuk chart (default)
-        # We want the last 30 points in chronological order
+        context['total_count'] = full_qs.count()
+
+        # Siapkan data untuk grafik (30 data terakhir)
+        # Kita ambil dari full_qs, diurutkan descending (terbaru dulu), ambil 30, lalu balik urutannya
         last30 = list(full_qs[:30])[::-1]
-        context['chart_labels'] = [r.timestamp.strftime('%H:%M:%S') for r in last30]
-        context['chart_temps'] = [float(r.temperature) for r in last30]
-        context['chart_humids'] = [float(r.humidity) for r in last30]
-        # Provide JSON-serialized strings so templates can safely read them without json_script
-        context['chart_labels_json'] = json.dumps(context['chart_labels'])
-        context['chart_temps_json'] = json.dumps(context['chart_temps'])
-        context['chart_humids_json'] = json.dumps(context['chart_humids'])
+
+        # Persiapkan list data
+        chart_labels = []
+        chart_temps = []
+        chart_humids = []
+
+        for r in last30:
+            # Format waktu HH:MM:SS
+            chart_labels.append(r.timestamp.strftime('%H:%M:%S'))
+            # Pastikan konversi ke float aman
+            try:
+                chart_temps.append(float(r.temperature))
+            except (ValueError, TypeError):
+                chart_temps.append(0)
+                
+            try:
+                chart_humids.append(float(r.humidity))
+            except (ValueError, TypeError):
+                chart_humids.append(0)
+
+        # Serialisasi ke JSON string agar aman dikonsumsi JavaScript
+        # Menggunakan DjangoJSONEncoder untuk menangani tipe data khusus jika ada
+        context['chart_labels_json'] = json.dumps(chart_labels, cls=DjangoJSONEncoder)
+        context['chart_temps_json'] = json.dumps(chart_temps, cls=DjangoJSONEncoder)
+        context['chart_humids_json'] = json.dumps(chart_humids, cls=DjangoJSONEncoder)
+        
         context['anomaly_count_json'] = json.dumps(context['anomaly_count'])
         context['normal_count_json'] = json.dumps(context['normal_count'])
+        
+        # Kirim ID lokasi agar JS bisa request API yang spesifik
         context['current_location_id_json'] = json.dumps(current_location.id)
+
         return context
 
 class AnomalyAlertUpdateView(LoginRequiredMixin, UpdateView):
