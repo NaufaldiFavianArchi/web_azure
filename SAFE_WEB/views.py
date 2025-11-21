@@ -171,10 +171,10 @@ class SensorDataListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         location_id = self.kwargs.get('location_id')
-        # Filter berdasarkan lokasi
+        # Filter berdasarkan lokasi dan urutkan dari terbaru
         qs = SensorData.objects.filter(location_id=location_id).order_by('-timestamp')
         
-        # Filter opsional berdasarkan device_id
+        # Filter opsional berdasarkan device_id jika ada di URL parameter
         device = self.request.GET.get('device_id')
         if device:
             qs = qs.filter(raw_device_id=device)
@@ -183,6 +183,8 @@ class SensorDataListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         location_id = self.kwargs.get('location_id')
+        
+        # Ambil objek lokasi, jika tidak ada akan return 404 (bukan 500)
         current_location = get_object_or_404(SensorLocation, id=location_id)
         context['current_location'] = current_location
         
@@ -200,7 +202,7 @@ class SensorDataListView(LoginRequiredMixin, ListView):
         context['total_count'] = full_qs.count()
 
         # Siapkan data untuk grafik (30 data terakhir)
-        # Kita ambil dari full_qs, diurutkan descending (terbaru dulu), ambil 30, lalu balik urutannya
+        # Kita ambil 30 data terbaru, lalu balik urutannya agar kronologis (kiri ke kanan)
         last30 = list(full_qs[:30])[::-1]
 
         # Persiapkan list data
@@ -210,20 +212,24 @@ class SensorDataListView(LoginRequiredMixin, ListView):
 
         for r in last30:
             # Format waktu HH:MM:SS
-            chart_labels.append(r.timestamp.strftime('%H:%M:%S'))
-            # Pastikan konversi ke float aman
+            if r.timestamp:
+                chart_labels.append(r.timestamp.strftime('%H:%M:%S'))
+            else:
+                chart_labels.append("-")
+            
+            # Pastikan konversi ke float aman (hindari error jika data None/Null)
             try:
-                chart_temps.append(float(r.temperature))
+                chart_temps.append(float(r.temperature) if r.temperature is not None else 0)
             except (ValueError, TypeError):
                 chart_temps.append(0)
                 
             try:
-                chart_humids.append(float(r.humidity))
+                chart_humids.append(float(r.humidity) if r.humidity is not None else 0)
             except (ValueError, TypeError):
                 chart_humids.append(0)
 
-        # Serialisasi ke JSON string agar aman dikonsumsi JavaScript
-        # Menggunakan DjangoJSONEncoder untuk menangani tipe data khusus jika ada
+        # Serialisasi ke JSON string agar aman dikonsumsi JavaScript di template
+        # Menggunakan DjangoJSONEncoder untuk menangani tipe data datetime/decimal
         context['chart_labels_json'] = json.dumps(chart_labels, cls=DjangoJSONEncoder)
         context['chart_temps_json'] = json.dumps(chart_temps, cls=DjangoJSONEncoder)
         context['chart_humids_json'] = json.dumps(chart_humids, cls=DjangoJSONEncoder)
