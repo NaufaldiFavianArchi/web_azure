@@ -9,7 +9,7 @@ from .forms import SensorLocationForm, AnomalyAlertForm
 from django.http import JsonResponse, HttpResponse
 import csv
 
-# lightweight status endpoint for background fetcher
+# --- Endpoint Status Sederhana ---
 def fetcher_status(request):
     try:
         from .services.fetcher import is_running
@@ -18,10 +18,12 @@ def fetcher_status(request):
         running = False
     return JsonResponse({'fetcher_running': running})
 
+# --- Endpoint API JSON Data Lokasi ---
 def location_data_json(request, location_id):
-    """Return latest sensor readings for a location as JSON."""
+    """Mengembalikan data sensor terbaru untuk lokasi tertentu sebagai JSON."""
     device = request.GET.get('device_id')
     qs = SensorData.objects.filter(location_id=location_id).order_by('-timestamp')
+    
     if device:
         qs = qs.filter(raw_device_id=device)
     
@@ -51,6 +53,7 @@ def location_data_json(request, location_id):
         }
         for r in latest
     ]
+    
     return JsonResponse({
         'location_id': location_id,
         'count': len(data),
@@ -60,11 +63,13 @@ def location_data_json(request, location_id):
         'total_count': total_count,
     })
 
+# --- Endpoint Export CSV ---
 def export_location_csv(request, location_id):
-    """Export sensor readings for a location as CSV."""
+    """Export data sensor untuk lokasi tertentu sebagai CSV."""
     device = request.GET.get('device_id')
     export_all = request.GET.get('all') == '1'
     qs = SensorData.objects.filter(location_id=location_id).order_by('-timestamp')
+    
     if device:
         qs = qs.filter(raw_device_id=device)
     
@@ -82,6 +87,7 @@ def export_location_csv(request, location_id):
 
     writer = csv.writer(response)
     writer.writerow(['id','timestamp','device_id','temperature','humidity','is_anomaly','location'])
+    
     for r in qs:
         writer.writerow([
             r.id, 
@@ -94,10 +100,12 @@ def export_location_csv(request, location_id):
         ])
     return response
 
+# --- Endpoint Semua Data JSON ---
 def all_data_json(request):
-    """Return latest sensor readings across all locations/devices."""
+    """Mengembalikan data sensor terbaru dari semua lokasi/perangkat."""
     device = request.GET.get('device_id')
     qs = SensorData.objects.all().order_by('-timestamp')
+    
     if device:
         qs = qs.filter(raw_device_id=device)
     
@@ -126,6 +134,8 @@ def all_data_json(request):
         for r in qs
     ]
     return JsonResponse({ 'count': len(data), 'data': data, 'total_anomaly_count': total_anomaly, 'total_normal_count': total_normal })
+
+# --- Class-Based Views (Halaman Web) ---
 
 class SensorLocationListView(LoginRequiredMixin, ListView):
     model = SensorLocation
@@ -172,6 +182,8 @@ class SensorDataListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         location_id = self.kwargs.get('location_id')
+        
+        # Gunakan get_object_or_404 agar aman jika ID tidak ditemukan
         current_location = get_object_or_404(SensorLocation, id=location_id)
         context['current_location'] = current_location
         
@@ -186,7 +198,8 @@ class SensorDataListView(LoginRequiredMixin, ListView):
         context['normal_count'] = full_qs.filter(is_anomaly=False).count()
         context['total_count'] = full_qs.count()
         
-        # PERBAIKAN PENTING: Handle data None/Kosong dengan aman
+        # PERBAIKAN PENTING: Ambil data untuk grafik dengan aman
+        # Ambil 30 data terbaru, lalu balik agar urut waktu (kiri ke kanan)
         last30 = list(full_qs[:30])[::-1]
         
         chart_labels = []
@@ -199,6 +212,7 @@ class SensorDataListView(LoginRequiredMixin, ListView):
             else:
                 chart_labels.append("-")
             
+            # Konversi aman ke float, hindari error jika data None
             try:
                 chart_temps.append(float(r.temperature) if r.temperature is not None else 0.0)
             except (ValueError, TypeError):
@@ -209,7 +223,7 @@ class SensorDataListView(LoginRequiredMixin, ListView):
             except (ValueError, TypeError):
                 chart_humids.append(0.0)
         
-        # Gunakan DjangoJSONEncoder untuk serialisasi yang aman
+        # Gunakan DjangoJSONEncoder untuk serialisasi JSON yang aman
         context['chart_labels_json'] = json.dumps(chart_labels, cls=DjangoJSONEncoder)
         context['chart_temps_json'] = json.dumps(chart_temps, cls=DjangoJSONEncoder)
         context['chart_humids_json'] = json.dumps(chart_humids, cls=DjangoJSONEncoder)
@@ -229,7 +243,8 @@ class AnomalyAlertUpdateView(LoginRequiredMixin, UpdateView):
 class SensorLocationUpdateView(LoginRequiredMixin, UpdateView):
     model = SensorLocation
     form_class = SensorLocationForm
-    template_name = 'SAFE_WEB/location_list.html' # Gunakan template yang benar (biasanya sama dengan list atau form terpisah)
+    # Pastikan template ini ada atau gunakan location_list.html
+    template_name = 'SAFE_WEB/location_list.html' 
     success_url = reverse_lazy('location_list')
 
 class SensorLocationDeleteView(LoginRequiredMixin, DeleteView):
