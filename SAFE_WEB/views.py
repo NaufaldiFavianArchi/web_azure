@@ -1,16 +1,13 @@
-from django.views.generic import CreateView, ListView, UpdateView, DeleteView, DetailView
-from django.urls import reverse_lazy
-from .models import SensorData, AnomalyAlert, SensorLocation
-from .forms import SensorLocationForm, AnomalyAlertForm 
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import get_object_or_404 
-from django.db.models import Count
-from django.http import JsonResponse
-from django.http import HttpResponse
-import csv
-import json
+from django.shortcuts import get_object_or_404
+from django.urls import reverse_lazy
 from django.core.serializers.json import DjangoJSONEncoder
-
+import json
+from .models import SensorData, AnomalyAlert, SensorLocation, SensorDevice
+from .forms import SensorLocationForm, AnomalyAlertForm
+from django.http import JsonResponse, HttpResponse
+import csv
 
 # lightweight status endpoint for background fetcher
 def fetcher_status(request):
@@ -21,27 +18,24 @@ def fetcher_status(request):
         running = False
     return JsonResponse({'fetcher_running': running})
 
-
 def location_data_json(request, location_id):
-    """Return latest sensor readings for a location as JSON. Optional ?device_id=xxx"""
+    """Return latest sensor readings for a location as JSON."""
     device = request.GET.get('device_id')
     qs = SensorData.objects.filter(location_id=location_id).order_by('-timestamp')
     if device:
         qs = qs.filter(raw_device_id=device)
-    # Support ?limit=N to control how many rows to return, and ?all=1 to return everything.
-    # Default limit is 1000 to keep payloads reasonable while allowing >100 items.
+    
     export_all = request.GET.get('all') == '1'
     if export_all:
         latest = qs
     else:
         try:
             limit = int(request.GET.get('limit')) if request.GET.get('limit') else 1000
-            if limit < 0:
-                limit = 1000
+            if limit < 0: limit = 1000
         except (TypeError, ValueError):
             limit = 1000
         latest = qs[:limit]
-    # compute totals on the matching queryset (not just the sliced latest)
+
     total_anomaly = qs.filter(is_anomaly=True).count()
     total_normal = qs.filter(is_anomaly=False).count()
     total_count = qs.count()
@@ -49,10 +43,10 @@ def location_data_json(request, location_id):
     data = [
         {
             'id': r.id,
-            'timestamp': r.timestamp.isoformat(),
+            'timestamp': r.timestamp.isoformat() if r.timestamp else None,
             'device_id': r.raw_device_id,
-            'temperature': float(r.temperature),
-            'humidity': float(r.humidity),
+            'temperature': float(r.temperature) if r.temperature is not None else 0.0,
+            'humidity': float(r.humidity) if r.humidity is not None else 0.0,
             'is_anomaly': bool(r.is_anomaly),
         }
         for r in latest
@@ -66,20 +60,18 @@ def location_data_json(request, location_id):
         'total_count': total_count,
     })
 
-
 def export_location_csv(request, location_id):
-    """Export sensor readings for a location as CSV. Optional ?device_id=... & ?all=1"""
+    """Export sensor readings for a location as CSV."""
     device = request.GET.get('device_id')
     export_all = request.GET.get('all') == '1'
     qs = SensorData.objects.filter(location_id=location_id).order_by('-timestamp')
     if device:
         qs = qs.filter(raw_device_id=device)
-    # Support ?limit=N for export size and ?all=1 for everything
+    
     if not export_all:
         try:
             limit = int(request.GET.get('limit')) if request.GET.get('limit') else 1000
-            if limit < 0:
-                limit = 1000
+            if limit < 0: limit = 1000
         except (TypeError, ValueError):
             limit = 1000
         qs = qs[:limit]
@@ -91,22 +83,29 @@ def export_location_csv(request, location_id):
     writer = csv.writer(response)
     writer.writerow(['id','timestamp','device_id','temperature','humidity','is_anomaly','location'])
     for r in qs:
-        writer.writerow([r.id, r.timestamp.isoformat(), r.raw_device_id or '', float(r.temperature), float(r.humidity), int(bool(r.is_anomaly)), r.location.location_name])
+        writer.writerow([
+            r.id, 
+            r.timestamp.isoformat() if r.timestamp else '', 
+            r.raw_device_id or '', 
+            float(r.temperature) if r.temperature is not None else 0.0, 
+            float(r.humidity) if r.humidity is not None else 0.0, 
+            int(bool(r.is_anomaly)), 
+            r.location.location_name if r.location else ''
+        ])
     return response
 
-
 def all_data_json(request):
-    """Return latest sensor readings across all locations/devices. Optional ?limit=N or ?all=1"""
+    """Return latest sensor readings across all locations/devices."""
     device = request.GET.get('device_id')
     qs = SensorData.objects.all().order_by('-timestamp')
     if device:
         qs = qs.filter(raw_device_id=device)
+    
     export_all = request.GET.get('all') == '1'
     if not export_all:
         try:
             limit = int(request.GET.get('limit')) if request.GET.get('limit') else 1000
-            if limit < 0:
-                limit = 1000
+            if limit < 0: limit = 1000
         except (TypeError, ValueError):
             limit = 1000
         qs = qs[:limit]
@@ -117,17 +116,16 @@ def all_data_json(request):
     data = [
         {
             'id': r.id,
-            'timestamp': r.timestamp.isoformat(),
+            'timestamp': r.timestamp.isoformat() if r.timestamp else None,
             'device_id': r.raw_device_id,
-            'temperature': float(r.temperature),
-            'humidity': float(r.humidity),
+            'temperature': float(r.temperature) if r.temperature is not None else 0.0,
+            'humidity': float(r.humidity) if r.humidity is not None else 0.0,
             'is_anomaly': bool(r.is_anomaly),
             'location_name': r.location.location_name if r.location else ''
         }
         for r in qs
     ]
     return JsonResponse({ 'count': len(data), 'data': data, 'total_anomaly_count': total_anomaly, 'total_normal_count': total_normal })
-
 
 class SensorLocationListView(LoginRequiredMixin, ListView):
     model = SensorLocation
@@ -147,21 +145,15 @@ class SensorLocationCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy('location_list')
 
     def form_valid(self, form):
-        # Simpan lokasi dulu
         response = super().form_valid(form)
-        
-        # Ambil initial_device_id dari POST data
         initial_device_id = self.request.POST.get('initial_device_id')
         if initial_device_id:
             from .models import SensorDevice
-            # get_or_create akan membuat baru atau ambil yang sudah ada (tidak error jika sudah ada)
             SensorDevice.objects.get_or_create(
                 location=self.object, 
                 device_id=initial_device_id
             )
-        
         return response
-
 
 class SensorDataListView(LoginRequiredMixin, ListView):
     model = SensorData
@@ -171,10 +163,7 @@ class SensorDataListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         location_id = self.kwargs.get('location_id')
-        # Filter berdasarkan lokasi dan urutkan dari terbaru
         qs = SensorData.objects.filter(location_id=location_id).order_by('-timestamp')
-        
-        # Filter opsional berdasarkan device_id jika ada di URL parameter
         device = self.request.GET.get('device_id')
         if device:
             qs = qs.filter(raw_device_id=device)
@@ -183,63 +172,52 @@ class SensorDataListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         location_id = self.kwargs.get('location_id')
-        
-        # Ambil objek lokasi, jika tidak ada akan return 404 (bukan 500)
         current_location = get_object_or_404(SensorLocation, id=location_id)
         context['current_location'] = current_location
         
-        # Ambil alerts terkait lokasi ini
         context['alerts'] = AnomalyAlert.objects.filter(
-            data_point__location__id=location_id
-        ).order_by('-alert_time')
+            data_point__location__id=location_id 
+        ).order_by('-alert_time') 
         
-        # Queryset penuh untuk statistik (tanpa paginasi)
+        context['location_form'] = SensorLocationForm() 
+        
         full_qs = self.get_queryset()
-        
-        # Hitung total normal & anomali
         context['anomaly_count'] = full_qs.filter(is_anomaly=True).count()
         context['normal_count'] = full_qs.filter(is_anomaly=False).count()
         context['total_count'] = full_qs.count()
-
-        # Siapkan data untuk grafik (30 data terakhir)
-        # Kita ambil 30 data terbaru, lalu balik urutannya agar kronologis (kiri ke kanan)
+        
+        # PERBAIKAN PENTING: Handle data None/Kosong dengan aman
         last30 = list(full_qs[:30])[::-1]
-
-        # Persiapkan list data
+        
         chart_labels = []
         chart_temps = []
         chart_humids = []
 
         for r in last30:
-            # Format waktu HH:MM:SS
             if r.timestamp:
                 chart_labels.append(r.timestamp.strftime('%H:%M:%S'))
             else:
                 chart_labels.append("-")
             
-            # Pastikan konversi ke float aman (hindari error jika data None/Null)
             try:
-                chart_temps.append(float(r.temperature) if r.temperature is not None else 0)
+                chart_temps.append(float(r.temperature) if r.temperature is not None else 0.0)
             except (ValueError, TypeError):
-                chart_temps.append(0)
-                
+                chart_temps.append(0.0)
+            
             try:
-                chart_humids.append(float(r.humidity) if r.humidity is not None else 0)
+                chart_humids.append(float(r.humidity) if r.humidity is not None else 0.0)
             except (ValueError, TypeError):
-                chart_humids.append(0)
-
-        # Serialisasi ke JSON string agar aman dikonsumsi JavaScript di template
-        # Menggunakan DjangoJSONEncoder untuk menangani tipe data datetime/decimal
+                chart_humids.append(0.0)
+        
+        # Gunakan DjangoJSONEncoder untuk serialisasi yang aman
         context['chart_labels_json'] = json.dumps(chart_labels, cls=DjangoJSONEncoder)
         context['chart_temps_json'] = json.dumps(chart_temps, cls=DjangoJSONEncoder)
         context['chart_humids_json'] = json.dumps(chart_humids, cls=DjangoJSONEncoder)
         
         context['anomaly_count_json'] = json.dumps(context['anomaly_count'])
         context['normal_count_json'] = json.dumps(context['normal_count'])
-        
-        # Kirim ID lokasi agar JS bisa request API yang spesifik
         context['current_location_id_json'] = json.dumps(current_location.id)
-
+        
         return context
 
 class AnomalyAlertUpdateView(LoginRequiredMixin, UpdateView):
@@ -247,23 +225,15 @@ class AnomalyAlertUpdateView(LoginRequiredMixin, UpdateView):
     form_class = AnomalyAlertForm
     template_name = 'SAFE_WEB/anomalyalert_update.html'
     success_url = reverse_lazy('location_list') 
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        return context
-
 
 class SensorLocationUpdateView(LoginRequiredMixin, UpdateView):
     model = SensorLocation
     form_class = SensorLocationForm
-    # KOREKSI INI: Ganti ke nama template yang ADA
-    template_name = 'SAFE_WEB/anomalyalert_update.html' 
+    template_name = 'SAFE_WEB/location_list.html' # Gunakan template yang benar (biasanya sama dengan list atau form terpisah)
     success_url = reverse_lazy('location_list')
-
 
 class SensorLocationDeleteView(LoginRequiredMixin, DeleteView):
     model = SensorLocation
-    template_name = 'SAFE_WEB/location_confirm_delete.html' # Buat template ini di Langkah 3
+    template_name = 'SAFE_WEB/location_confirm_delete.html'
     context_object_name = 'location'
-    # Arahkan kembali ke daftar lokasi setelah berhasil
     success_url = reverse_lazy('location_list')
